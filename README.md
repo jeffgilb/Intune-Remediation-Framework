@@ -1,4 +1,4 @@
-# Intune Remediation Framework
+# Jeff's Intune Remediation Framework
 AKA Intune Remediations at Scale Best Practices, Pitfalls, and Engineering Patterns
 
 ## Level 100: The warm up
@@ -48,17 +48,19 @@ Telemetry That Keeps You Out of Trouble
 
 ## Scripts
 ### Create-IntuneRemediation
+Install from the PowerShell Gallery (recommended so you can run it repeatedly easily):
 
     Install-Script Create-IntuneRemediation
     
-        Or 
+Or just save it locally to have a look:
 
     Save-Script Create-IntuneRemediation –Path <path>
 
 ### Collect-IntuneRemediationLogs
+Install from the PowerShell Gallery:
 
     Install-Script Collect-IntuneRemediationLogs
-    
-        Or 
+
+Just save it locally so you can run it on remote devices (recommended for this one): 
 
     Save-Script Collect-IntuneRemediationLogs –Path <path>
