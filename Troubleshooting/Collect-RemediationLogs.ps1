@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 1.0.1
+.VERSION 1.0.2
 
 .GUID 4db7d295-a70a-4313-aeeb-909de8d2880b
 
@@ -25,7 +25,7 @@
 .EXTERNALSCRIPTDEPENDENCIES 
 
 .RELEASENOTES
-    10.13.26    v1.0.1  Initial release.
+    10.13.26    v1.0.2  Initial release.
 #>
 
 <#
@@ -36,7 +36,8 @@
 .DESCRIPTION
     Collects:
       - Remediation-related Intune Management Extension logs
-      - Custom Intune Remediation logs
+      - Custom Intune Remediation logs [$customLogPath]
+      - Custom registry checkpoint paths [$CheckpointPath]
       - IME service information
       - HealthScripts cache inventory
       - Script package file hashes
@@ -51,13 +52,14 @@
 Run this from an elevated PowerShell session. It creates a timestamped ZIP file in C:\Windows\Temp by default.
 
 Normal execution
-.\Collect-IntuneRemediationLogs.ps1
+.\Collect-RemediationLogs.ps1
 
 Collect seven days of events
-.\Collect-IntuneRemediationLogs.ps1 -OutputPath "C:\Support" -DaysOfEvents 7
+.\Collect-RemediationLogs.ps1 -OutputPath "C:\Support" -DaysOfEvents 7
 
 Include cached script contents
-.\Collect-IntuneRemediationLogs.ps1 -IncludeCachedScripts
+[REQUIRES: RunAs System]
+.\Collect-RemediationLogs.ps1 -IncludeCachedScripts
 
 .PARAMETER OutputPath
     Directory where the final ZIP file will be created.
@@ -67,20 +69,18 @@ Include cached script contents
     to include.
 
 .PARAMETER IncludeCachedScripts
+    Requires the script be run with System permissions! Try using PsExec.
     Copies cached DetectionScript.ps1 and RemediationScript.ps1 files.
     Use carefully because scripts can contain internal implementation details.
 
 .EXAMPLE
-    .\Collect-IntuneRemediationLogs.ps1
+    .\Collect-RemediationLogs.ps1
 
 .EXAMPLE
-    .\Collect-IntuneRemediationLogs.ps1 `
-        -OutputPath "C:\Support" `
-        -DaysOfEvents 7
+    .\Collect-RemediationLogs.ps1 -OutputPath "C:\Support" -DaysOfEvents 7
 
 .EXAMPLE
-    .\Collect-IntuneRemediationLogs.ps1 `
-        -IncludeCachedScripts
+    .\Collect-RemediationLogs.ps1 -IncludeCachedScripts
 #>
 
 [CmdletBinding()]
