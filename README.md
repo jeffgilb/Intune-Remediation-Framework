@@ -56,11 +56,11 @@ Or just save it locally to have a look:
 
     Save-Script Create-IntuneRemediation –Path <path>
 
-### Collect-IntuneRemediationLogs
+### Collect-RemediationLogs
 Install from the PowerShell Gallery:
 
-    Install-Script Collect-IntuneRemediationLogs
+    Install-Script Collect-RemediationLogs
 
 Just save it locally so you can run it on remote devices (recommended for this one): 
 
-    Save-Script Collect-IntuneRemediationLogs –Path <path>
+    Save-Script Collect-RemediationLogs –Path <path>
