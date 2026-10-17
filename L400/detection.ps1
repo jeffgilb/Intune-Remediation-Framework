@@ -1,12 +1,9 @@
-﻿<#
+﻿<# 
 .SYNOPSIS
-    Intune Remediation detection script for validating the USO (Update Session Orchestrator) service configuration.
+    Intune Remediation detection script template.
 
 .DESCRIPTION
-    Verifies that the specified Windows service exists, is configured for Automatic startup,
-    and is currently running. Results are logged in CMTrace-compatible format, written to
-    the registry for historical tracking, and returned to the Intune admin center through
-    standard output.
+    This script template provides a starting point for creating Intune Remediation scripts.
 
     The script includes helper functions for:
       - CMTrace-style logging
@@ -16,7 +13,10 @@
 
 .NOTES
     Detection results are stored under:
-        HKLM:\SOFTWARE\Intune\Remediations
+        HKLM:\SOFTWARE\IntuneRemediations\<LogName>
+
+    Log File: (deleted if remediation script isn't triggered)
+        <SystemDrive>\Logs\IR\<LogName>.log
 
     Detection output written with the -StdOut switch is displayed in the
     Intune admin center.
@@ -25,12 +25,14 @@
     Author: Jeff Gilbert
 
 .EXIT CODES
-0 = Compliant
-1 = Non-compliant (remediation required)
-2 = Error or service configuration unavailable
+    0 = Compliant
+    1 = Non-compliant (remediation required)
+    2 = Error encountered
 #>
 
 #region Logging
+# Template logging function for the Intune detection script
+# * DO NOT MODIFY  *
 function Write-Log {
 
     #-- THIS FUNCTION REQUIRES THE FOLLOWING BE DECLARED IN THE MAIN SCRIPT --#
@@ -51,7 +53,7 @@ function Write-Log {
     $Time = $now.ToString('HH:mm:ss.ffffff', [System.Globalization.CultureInfo]::InvariantCulture)
     $Date = $now.ToString('MM-dd-yyyy',      [System.Globalization.CultureInfo]::InvariantCulture)
   # Escape message for CMTrace payload (XML-like). SecurityElement.Escape handles &, <, >, " (quotes) safely
-    $escapedMessage = [System.Security.SecurityElement]::Escape($Message)
+    $escapedMessage = [System.Security.SecurityElement]::Escape($Message).Replace('&apos;', "'")
   # Identify if it was a function that called Log and make it the component"
     $scriptFullPath = $PSCommandPath ; $scriptName = Split-Path -Path $scriptFullPath -Leaf
     $caller = (Get-PSCallStack)[1].Command
@@ -61,12 +63,11 @@ function Write-Log {
                 -f $escapedMessage, $Time, $Date, $Component, $Type)
     try { 
       # Write the log entry
-        $script:logFile = Join-Path $logPath "$logName.log"
         $dir = Split-Path -Path  $logFile -Parent 
       # Ensure log directory exists
         New-Item -ItemType Directory -Path $dir -Force | Out-Null 
       # Write message to the log file
-        Add-Content -LiteralPath $logFile -Value $logLine -Encoding UTF8
+        $logLine | Out-File -LiteralPath $logFile -Append -Encoding UTF8
       # Add message to detection results sent to the Intune admin center  
         if ($StdOut) { $detectionOutput.Add($Message) }
       # Write all log lines to console for interactive testing/transcript capture
@@ -84,10 +85,11 @@ function Write-Log {
         return
     }
 }
-
 #endregion Logging
 
-#region Helpers
+#region Template Helpers
+# Template helper functions for the Intune detection script
+# * DO NOT MODIFY  *
 function Restart-64Bit {
     # If we are running as a 32-bit process on an x64 system, re-launch as a 64-bit process first
     if ("$env:PROCESSOR_ARCHITEW6432" -ne "ARM64") {
@@ -103,38 +105,48 @@ function Detection-Result {
         [string]$logName,
         [string]$ScriptVersion,
         [datetime]$StartTime,
-        [datetime]$EndTime
+        [datetime]$EndTime,
+        [string]$exitCode
     )
 
-    $BaseKey = Join-Path $StateKey $logName
-    if (-not (Test-Path $BaseKey)) { New-Item -Path $BaseKey -Force | Out-Null }
-    $DurationSeconds = [math]::Round((($EndTime).ToUniversalTime() -
-    ($StartTime).ToUniversalTime()).TotalSeconds, 2)
+    try{
+        if (-not (Test-Path $BaseKey)) { New-Item -Path $BaseKey -Force | Out-Null }
+        $DurationSeconds = [math]::Round((($EndTime).ToUniversalTime() -
+        ($StartTime).ToUniversalTime()).TotalSeconds, 2)
 
-    if ($compliant -ne $true) {
-        $DetectionResult = "Fail"
-        $details = ($detectionOutput -join " | ")
-    } else {
-        $DetectionResult = "Pass"
-        $details = "[PASS] All checks successful"
+        if ($exitCode -ne 0) {
+            $DetectionResult = "Fail"
+            $details = ($detectionOutput -join " | ")
+        } else {
+            $DetectionResult = "Pass"
+            $details = "[PASS] All checks successful"
+        }
+
+        $Properties = @{
+            DetectionValue          = $DetectionResult
+            DetectionEndTimeUtc     = $EndTime.ToUniversalTime().ToString("o")
+            DetectionRuntimeSeconds = $DurationSeconds
+            DetectionBeginTimeUtc   = $StartTime.ToUniversalTime().ToString("o")
+            DetectionState          = $details
+            DetectionScriptVersion  = $ScriptVersion
+            DetectionScriptExitCode = $exitCode
+        }
+
+        foreach ($Property in $Properties.GetEnumerator()) {
+            New-ItemProperty `
+                -Path $BaseKey `
+                -Name $Property.Key `
+                -Value $Property.Value `
+                -PropertyType String `
+                -Force | Out-Null
+        }
+    
+        Write-Log "*****       End of detection script actions       *****"
     }
-
-    $Properties = @{
-        DetectionValue          = $DetectionResult
-        DetectionEndTimeUtc     = $EndTime.ToUniversalTime().ToString("o")
-        DetectionRuntimeSeconds = $DurationSeconds
-        DetectionBeginTimeUtc   = $StartTime.ToUniversalTime().ToString("o")
-        DetectionState          = $details
-        DetectionScriptVersion  = $ScriptVersion
-    }
-
-    foreach ($Property in $Properties.GetEnumerator()) {
-        New-ItemProperty `
-            -Path $BaseKey `
-            -Name $Property.Key `
-            -Value $Property.Value `
-            -PropertyType String `
-            -Force | Out-Null
+    catch {
+        Write-Log "Failed to write detection registry result: $($_.Exception.Message)" -Type 2
+        Write-Log "*****       End of detection script actions       *****"
+        $exitCode = 2
     }
 }
 
@@ -145,10 +157,16 @@ function Remove-ExpiredRemediationLog {
         [int] $RetainDays = 30
     )
 
-    if (-not (Test-Path -LiteralPath $BaseKey)) {
-        Write-Log "Registry key not found: $BaseKey" -Type 2
+	if ($exitCode -eq 1) { # Do not delete the log  
         return
     }
+        
+    $BaseKey = Join-Path -Path $StateKey -ChildPath $logName
+
+	if (-not (Test-Path -LiteralPath $BaseKey)) {
+    	Remove-Item -LiteralPath $LogFile -Force
+        return
+	}
 
     $keyProperties = Get-ItemProperty -LiteralPath $BaseKey
     $resultProperty = $keyProperties.PSObject.Properties['RemediationResult']
@@ -182,79 +200,81 @@ function Remove-ExpiredRemediationLog {
         }
     }
 }
-#endregion Helpers
+#endregion Template Helpers
 
-#region Config
-# --- Standard Variable Definitions ---
-$ScriptVersion      = "1.0.0"                       # Version of the script
-$logPath            = "$env:SystemDrive\Logs\IR"    # Ensure this path is pulled with Intune collects diagnostics
-$logName            = "UsoSvcRemediation"           # Name of the log file
-$StateKey           = "HKLM:\SOFTWARE\Intune\Remediations" # Base registry key for storing remediation state
-# -------------------------------------
+#region Your Helpers
 
-# ---   Remediation Specific vars   ---
-$ServiceName        = "UsoSvc"                      # Service name to check
-# -------------------------------------
+# Your helper functions for the Intune detection script go here
 
-# ---     General Configuration     ---
-$ErrorActionPreference  = 'Stop'                    # Ensures try/catch works reliably
-$InteractiveLogging     = $true                     # Display console output for troubleshooting 
-$verboseLogging         = $false                    # Enables script transcript for troubleshooting
-$compliant              = $true                     # Intitalize compliance state
-$detectionOutput = [System.Collections.Generic.List[string]]::new() # list of remediation detection output to display in Intune admin center
-Restart-64Bit                                       # Ensure we are running as a 64-bit process on an x64 system 
-$StartTime = Get-Date
-# -------------------------------------
-#endregion Config
+#endregion Your Helpers
 
 #---------------------------------------------- BEGIN ----------------------------------------------|
-if ($verboseLogging) { Start-Transcript -Path (Join-Path $logPath "${logName}_verbose.log") }  
-Write-Log "***** Starting detection for the $ServiceName service *****" -Component 'Detection Begin'
+
+# ---      Script Configuration     ---
+# * MODIFY THESE AS NEEDED *
+$ScriptVersion          = "1.0.0"                               # Version of the script
+$logPath                = "$env:SystemDrive\Logs\IR"            # Ensure this path is pulled with Intune collects diagnostics
+$logName                = "MyRemediation"                      # Name of the log file
+$StateKey               = "HKLM:\SOFTWARE\IntuneRemediations"   # Base registry key for storing remediation state
+$InteractiveLogging     = $false                                # Enable/disable display console output for troubleshooting (DO NOT deploy as $true)
+$verboseLogging         = $false                                # Enable/disable script transcript for troubleshooting
+$retainDays             = 30                                    # How long to retain logs after a successful remediation has run (default is 30 days)
+# -------------------------------------
+
+#region Do Not Modify
+# * DO NOT MODIFY THESE  * 
+$ErrorActionPreference  = 'Stop'                                # Ensures try/catch works reliably [do not modify]
+$logFile                = Join-Path $logPath "$logName.log"     # Full path to the log file [do not modify]
+$baseKey                = Join-Path $StateKey "$logName"        # Base registry key for storing remediation state [do not modify]
+$exitCode               = 0                                     # Intitalize exit code for compliance [do not modify]
+$StartTime              = Get-Date                              # Record script execution start time [do not modify]
+$detectionOutput = [System.Collections.Generic.List[string]]::new() # Detection output to display in Intune admin center [do not modify]
+Restart-64Bit                                                   # Ensure we are running as a 64-bit process on an x64 system [do not modify]
+if ($verboseLogging) { Start-Transcript -Path (Join-Path $logPath "${logName}_verbose.log") -Append }  
+Write-Log "*****      Starting detection script actions.     *****"  -Component 'Detection Begin'
 Write-Log "Detection script version: $ScriptVersion" -Component 'Version'
+# -------------------------------------
+#endregion Do Not Modify
 
-try {
-  # Detection logic goes here
-    $service = Get-Service -Name $ServiceName
-    if (-not $service) {
-        Write-Log "[FAIL] $ServiceName Service missing." -Type 3 -StdOut
-        exit 2
-    }
+try { 
+    <#  INSTRUCTIONS:
+        - Only modify the detection content within this Try block!
+        - You only need to check for failures. If checks fail, set $exitCode = 1. If script fails, set $exitCode = 2. 
+        - Use Write-Log to output messages to the log (also ouputs to the console if $InteractiveLogging is $true).
+        If you want to include the output in the Intune admin center's detection output, add -StdOut 
+        to the end of the line. Max length of all aggregated messages is 2,048 characters total. 
 
-    $svcConfig = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop  
-    if (-not $svcConfig) {
-        Write-Log -Message "Service config unavailable — cannot remediate." -Type 3 -StdOut
-        exit 2
-    }
+    # ----------------------------------------------------
+    # --------- Your detection logic starts here ---------  
+    # --------------------------------------------------#>
 
-    if ($svcConfig.StartMode -ne "Auto") { # e.g. 'Automatic', 'Manual', 'Disabled'
-        Write-Log "[FAIL] The $ServiceName StartMode is $($svcConfig.StartMode) (expected Auto)" -Type 3 -StdOut
-        $compliant = $false
-    }
 
-    if ($svcConfig.State -ne "Running") { # e.g. 'Running', 'Stopped'
-        Write-Log "[FAIL] The $ServiceName Service state is $($svcConfig.State) (expected Running)" -Type 3 -StdOut
-        $compliant = $false
-    }
 
-  # Compliance Result
-    if ($compliant) {
-        Write-Log "[PASS] The $ServiceName Service is compliant." -StdOut
-      # How long do you want to retain logs after a successful remediation has run?  
-        $retainDays = 30
-      # Delete remediation logs that have been remediated longer than $retainDays ago
-        Remove-ExpiredRemediationLog
-        exit 0
+
+
+    # ----------------------------------------------------
+    # ----------   End of your detection logic  ----------  
+    # ----------------------------------------------------
+    
+  # Compliance Result * DO NOT MODIFY  *
+    if ($exitCode -eq 0) { # Log will not be saved if there are no issues to log and the device hasn't been non-compliant recently.
+        Write-Log "[PASS] The device is compliant." -StdOut # Intune detection output 
+        exit $exitCode
     } else { # Device is not compliant
-        Write-Log "[FAIL] The $ServiceName Service is non-compliant." -Type 3 -StdOut
-        Write-Log "*****              End of detection actions             *****" -Component "Detection End"
-        exit 1
+        Write-Log "[FAIL] The device is non-compliant."
+        exit $exitCode
     }
-} catch {
-    Write-Log "[ERROR] $_" -Type 3 -StdOut
-    exit 2
-} finally {
+} catch { # * DO NOT MODIFY  *
+    $exitCode = 2
+    Write-Log "[ERROR] $($_.Exception.Message)" -Type 3 -StdOut
+    exit $exitCode
+} finally {  # * DO NOT MODIFY  *
     $EndTime = Get-Date
-    Detection-Result -logName $logName -ScriptVersion $ScriptVersion -StartTime $StartTime -EndTime $EndTime
-    Write-Output ($detectionOutput -join " | ") # This is all the StdOut lines displayed in the Intune admin center's detection output
+  # Create registry checkpoint for detection results
+    Detection-Result -logName $logName -ScriptVersion $ScriptVersion -StartTime $StartTime -EndTime $EndTime -exitCode $exitCode
+  # Delete existing remediation logs for issues that have been remediated longer than $retainDays ago.
+    Remove-ExpiredRemediationLog -RetainDays $retainDays
+    Write-Output ($detectionOutput -join " | ")     # Intune detection output
     if ($verboseLogging) { Stop-Transcript }
 }
+

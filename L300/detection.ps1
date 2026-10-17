@@ -42,7 +42,7 @@ function Write-Log {
     $Time = $now.ToString('HH:mm:ss.ffffff', [System.Globalization.CultureInfo]::InvariantCulture)
     $Date = $now.ToString('MM-dd-yyyy',      [System.Globalization.CultureInfo]::InvariantCulture)
   # Escape message for CMTrace payload (XML-like). SecurityElement.Escape handles &, <, >, " (quotes) safely
-    $escapedMessage = [System.Security.SecurityElement]::Escape($Message)
+    $escapedMessage = [System.Security.SecurityElement]::Escape($Message).Replace('&apos;', "'")
   # Identify if it was a function that called Log and make it the component"
     $scriptFullPath = $PSCommandPath ; $scriptName = Split-Path -Path $scriptFullPath -Leaf
     $caller = (Get-PSCallStack)[1].Command
@@ -90,50 +90,43 @@ function Restart-64Bit {
 
 #endregion Helpers
 
-#region Config
-# --- Variable Definitions ---
-$logPath            = "$env:SystemDrive\Logs\IR"    # Ensure this path is pulled with Intune collects diagnostics
-$logName            = "UsoSvcRemediation"           # Name of the log file
-$ScriptVersion      = "1.0.0"                       # Version of the script
-$ServiceName        = "UsoSvc"
-# -----------------------------
-
-# --- General Configuration ---
-$ErrorActionPreference  = 'Stop'                    # Ensures try/catch works reliably
-$InteractiveLogging     = $true                     # Display console output for testing 
-$compliant              = $true                     # Intitalize compliance state
+# ---      Script Configuration     ---
+$ErrorActionPreference  = 'Stop'                        # Ensures try/catch works reliably
+$logPath                = "$env:SystemDrive\Logs\IR"    # Ensure this path is pulled with Intune collects diagnostics
+$logName                = "UsoSvcRemediation"           # Name of the log file
+$ScriptVersion          = "1.0.0"                       # Version of the script
+$InteractiveLogging     = $false                         # Display console output for testing 
+$compliant              = $true                         # Intitalize compliance state
 $detectionOutput = [System.Collections.Generic.List[string]]::new() # list of remediation detection output to display in Intune admin center
-Restart-64Bit                                       # Ensure we are running as a 64-bit process on an x64 system 
-# -----------------------------
-#endregion Config
+Restart-64Bit                                           # Ensure we are running as a 64-bit process on an x64 system 
+# -------------------------------------
 
 #---------------------------------------------- BEGIN ----------------------------------------------|
   
-Write-Log "***** Starting detection for the $ServiceName service *****" -Component 'Detection Begin'
+Write-Log "*****     Starting detection script actions.     *****" 
 Write-Log "Detection script version: $ScriptVersion" -Component 'Version'
 
-# Get startup type via WMI/Win32_Service
-try {
-    $service = Get-Service -Name $ServiceName
-    if (-not $service) {
-        Write-Log "[FAIL] $ServiceName Service missing." -Type 3 -StdOut
-        exit 2
-    }
+# Service name to check
+$ServiceName = "UsoSvc"
+# Update Orchestrator Service. Manages Windows Updates. If stopped, 
+# your devices will not be able to download and install the latest updates.
 
+try {
+
+  # Get startup type via WMI/Win32_Service
     $svcConfig = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop  
     if (-not $svcConfig) {
         Write-Log -Message "Service config unavailable — cannot remediate." -Type 3 -StdOut
-        exit 2
-    }
-
-    if ($svcConfig.StartMode -ne "Auto") { # e.g. 'Automatic', 'Manual', 'Disabled'
-        Write-Log "[FAIL] The $ServiceName StartMode is $($svcConfig.StartMode) (expected Auto)" -Type 3 -StdOut
         $compliant = $false
-    }
-
-    if ($svcConfig.State -ne "Running") { # e.g. 'Running', 'Stopped'
-        Write-Log "[FAIL] The $ServiceName Service state is $($svcConfig.State) (expected Running)" -Type 3 -StdOut
-        $compliant = $false
+    } else {
+        if ($svcConfig.StartMode -ne "Auto") { # e.g. 'Automatic', 'Manual', 'Disabled'
+            Write-Log "[FAIL] The $ServiceName StartMode is $($svcConfig.StartMode) (expected Auto)" -Type 3 -StdOut
+            $compliant = $false
+        }
+        if ($svcConfig.State -ne "Running") { # e.g. 'Running', 'Stopped'
+            Write-Log "[FAIL] The $ServiceName Service state is $($svcConfig.State) (expected Running)" -Type 3 -StdOut
+            $compliant = $false
+        }
     }
 
     if ($compliant) {
@@ -143,11 +136,11 @@ try {
         exit 0
     } else {
         Write-Log "[FAIL] The $ServiceName Service is non-compliant." -Type 3 -StdOut
-        Write-Log "*****              End of detection actions             *****" -Component "Detection End"
+        Write-Log "*****      End of detection script actions.      *****"  -Component "Detection End"
         exit 1
     }
 } catch {
-    Write-Log "[ERROR] Failed to read service config for $ServiceName. $_" -Type 3 -StdOut
+    Write-Log "[ERROR] $($_.Exception.Message)" -Type 3 -StdOut
     exit 2
 } finally {
     Write-Output ($detectionOutput -join " | ") # This is all the StdOut lines displayed in the Intune admin center's detection output

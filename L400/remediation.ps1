@@ -1,30 +1,21 @@
 ﻿<#
 .SYNOPSIS
-    Intune Remediation script that restores the Update Session Orchestrator (UsoSvc)
-    service to a compliant state.
+    Standard Intune Remediation Script Template with CMTrace-compatible logging 
+    and registry checkpoint reporting.
 
 .DESCRIPTION
-    This script remediates devices where the UsoSvc service is not configured
-    correctly. It verifies the service exists, ensures the startup type is set
-    to Automatic, and confirms the service is running.
-
-    Activity is logged to a CMTrace-compatible log file and remediation results
-    are written to the registry for historical tracking and reporting.
-    Each execution generates a unique RunId and maintains a remediation run count
-    to assist with troubleshooting and trend analysis.
+    This script template provides a starting point for creating Intune Remediation scripts.
 
 .FEATURES
     - CMTrace-compatible logging
     - Automatic relaunch in 64-bit PowerShell when required
-    - Service startup type remediation
-    - Service state remediation
-    - Registry-based remediation history and telemetry
     - Remediation run counter
+    - Remediation result tracking in the registry
     - Transcript logging support for troubleshooting
 
 .NOTES
     Registry Location:
-        HKLM:\SOFTWARE\Intune\Remediations\<LogName>
+        HKLM:\SOFTWARE\IntuneRemediations\<LogName>
 
     Log File:
         <SystemDrive>\Logs\IR\<LogName>.log
@@ -41,29 +32,16 @@
     Version: 1.0.0
     Author: Jeff Gilbert
 
-.REMEDIATION ACTIONS
-    1. Validate the target service exists.
-    2. Change the startup type to Automatic if required.
-    3. Start the service if it is not running.
-    4. Verify the service is compliant after remediation.
-    5. Store remediation telemetry in the registry.
-
 .EXIT CODES
-0 = Remediation successful
-1 = Remediation failed
-2 = Error encountered or service unavailable
+    0 = Remediation successful
+    1 = Remediation failed
+    2 = Error encountered
 
-.PARAMETER ServiceName
-    Name of the Windows service to remediate. Default: UsoSvc.
-
-.AUTHOR
-    Jeff Gilbert
-
-.VERSION
-    1.0.0
 #>
 
 #region Logging
+# Template logging function for the Intune detection script
+# * DO NOT MODIFY  *
 function Write-Log {
 
     #-- THIS FUNCTION REQUIRES THE FOLLOWING BE DECLARED IN THE MAIN SCRIPT --#
@@ -84,7 +62,7 @@ function Write-Log {
     $Time = $now.ToString('HH:mm:ss.ffffff', [System.Globalization.CultureInfo]::InvariantCulture)
     $Date = $now.ToString('MM-dd-yyyy',      [System.Globalization.CultureInfo]::InvariantCulture)
   # Escape message for CMTrace payload (XML-like). SecurityElement.Escape handles &, <, >, " (quotes) safely
-    $escapedMessage = [System.Security.SecurityElement]::Escape($Message)
+    $escapedMessage = [System.Security.SecurityElement]::Escape($Message).Replace('&apos;', "'")
   # Identify if it was a function that called Log and make it the component"
     $scriptFullPath = $PSCommandPath ; $scriptName = Split-Path -Path $scriptFullPath -Leaf
     $caller = (Get-PSCallStack)[1].Command
@@ -94,16 +72,13 @@ function Write-Log {
                 -f $escapedMessage, $Time, $Date, $Component, $Type)
     try { 
       # Write the log entry
-        $script:logFile = Join-Path $logPath "$logName.log"
         $dir = Split-Path -Path  $logFile -Parent 
       # Ensure log directory exists
         New-Item -ItemType Directory -Path $dir -Force | Out-Null 
       # Write message to the log file
-        Add-Content -LiteralPath $logFile -Value $logLine -Encoding UTF8
-        
+        $logLine | Out-File -LiteralPath $logFile -Append -Encoding UTF8
       # Add message to detection results sent to the Intune admin center  
         if ($StdOut) { $detectionOutput.Add($Message) }
-
       # Write all log lines to console for interactive testing/transcript capture
         if ($InteractiveLogging) {
             switch ($Type) {
@@ -140,7 +115,7 @@ function Increment-RemediationRunCount {
     )
 
     try {
-        $baseKey = "HKLM:\SOFTWARE\Intune\Remediations\$LogName"
+
         if (-not (Test-Path -LiteralPath $baseKey)) { New-Item -Path $baseKey -Force | Out-Null }
         
         $existing = Get-ItemProperty -Path $baseKey -Name "RunCount" -ErrorAction SilentlyContinue
@@ -158,7 +133,7 @@ function Increment-RemediationRunCount {
         return $newCount
     }
     catch {
-        Log "Failed to increment remediation run count: $($_.Exception.Message)" -Type 2
+        Write-Log "Failed to increment remediation run count: $($_.Exception.Message)" -Type 2
         return 0
     }
 }
@@ -171,19 +146,18 @@ function Remediation-Result {
         [string]$LastRemediationResult,
         [datetime]$StartTime,
         [datetime]$EndTime = (Get-Date),
-        [int]$ExitCode = 0,
-        [string]$Details = ""       
+        [string]$Details = "",
+        [string]$exitCode           
     )
 
     try {
-        $BaseKey = Join-Path $StateKey $logName
-        if (-not (Test-Path $BaseKey)) { New-Item -Path $BaseKey -Force | Out-Null }
+        if (-not (Test-Path $baseKey)) { New-Item -Path $baseKey -Force | Out-Null }
         $DurationSeconds = [math]::Round((($EndTime).ToUniversalTime() -
         ($StartTime).ToUniversalTime()).TotalSeconds, 2)
 
         $LastDetectionFailure = (Get-ItemProperty -Path $baseKey -Name "DetectionState" -ErrorAction SilentlyContinue).DetectionState
 
-        if ($RemediationSucceeded -ne $true) {
+        if ($exitCode -ne 0) {
             $RemediationResult = "Fail"
             $RemediationDetails = ($detectionOutput -join " | ")
         } else {
@@ -197,10 +171,10 @@ function Remediation-Result {
             RemediationResult           = $RemediationResult
             RemediationBeginTimeUtc     = $StartTime.ToUniversalTime().ToString("o")
             RemediationEndTimeUtc       = $EndTime.ToUniversalTime().ToString("o")
-            RemediationRuntimeSeconds   = $durationSeconds.ToString()
-            RemediationExitCode         = $ExitCode.ToString()
+            RemediationRuntimeSeconds   = $DurationSeconds.ToString()
             RunId                       = $RunId
             RemediationScriptVersion    = $ScriptVersion
+            RemediationScriptExitCode   = $exitCode
         }
 
         foreach ($property in $properties.GetEnumerator()) {
@@ -218,114 +192,83 @@ function Remediation-Result {
             -Value ([int]$script:RunCount) `
             -PropertyType DWord `
             -Force | Out-Null
-
+    
         Write-Log "Registry checkpoint updated: $baseKey"
-        
+        Write-Log "*****     End of remediation script actions.     *****"
     }
     catch {
+        $exitCode = 2    
         Write-Log "Failed to write remediation registry result: $($_.Exception.Message)" -Type 2
+        Write-Log "*****     End of remediation script actions.     *****"
     }
 }
 
 #endregion Helpers
 
-#region Config
-# --- Standard Variable Definitions ---
-$ScriptVersion      = "1.0.0"                       # Script version
-$logPath            = "$env:SystemDrive\Logs\IR"    # Ensure this path is pulled with Intune collects diagnostics
-$logName            = "UsoSvcRemediation"           # Name of the log file
-$StateKey           = "HKLM:\SOFTWARE\Intune\Remediations" # Base registry key for storing remediation state
-# -------------------------------------
+#region Your Helpers
 
-# ---   Remediation Specific vars   ---
-$ServiceName        = "UsoSvc"                      # Service name to check
-# -------------------------------------
+# Your helper functions for the Intune remediation script go here
 
-# --- General Configuration ---
-$ErrorActionPreference  = 'Stop'                    # Ensures try/catch works reliably
-$InteractiveLogging     = $true                     # Display console output for troubleshooting
-$verboseLogging         = $false                    # Enables script transcript for troubleshooting
-$RemediationSucceeded   = $true                     # Intitalize remediation state
-$RunId = [guid]::NewGuid().ToString()               # Generates a new Correlation Id (CID) on every run
-Restart-64Bit                                       # Ensure we are running as a 64-bit process on an x64 system    
-$StartTime              = Get-Date                  # Record script execution start time
-$RunCount = Increment-RemediationRunCount -LogName $logName # Keep track of how many times this script has run
-# -------------------------------------
+#endregion Your Helpers
 
-#endregion Config
 
 #---------------------------------------------- BEGIN ----------------------------------------------|
-if ($verboseLogging) { Start-Transcript -Path (Join-Path $logPath "${logName}_verbose.log") }  
-Write-Log "*****    Starting remediation for service $ServiceName.    *****" 
-Write-Log "Remediation script version: $ScriptVersion." -Component "Version"
+# ---      Script Configuration     ---
+# * MODIFY THESE AS NEEDED *
+$scriptVersion      = "1.0.0"                       # Script version
+$logPath            = "$env:SystemDrive\Logs\IR"    # Log path must match the path in the detection script
+$logName            = "MyRemediation"                    # Log name must match the name in the detection script
+$stateKey           = "HKLM:\SOFTWARE\IntuneRemediations" # Regkey must match the regkey in the detection script
+$interactiveLogging = $false                        # Display console output for troubleshooting
+$verboseLogging     = $false                        # Enables script transcript for troubleshooting
+# -------------------------------------
+
+#region Do Not Modify
+# * DO NOT MODIFY THESE *
+$ErrorActionPreference  = 'Stop'                    # Ensures try/catch works reliably [do not modify]
+$logFile            = Join-Path $logPath "$logName.log" # Full path to the log file [do not modify]
+$baseKey            = Join-Path $stateKey "$logName"    # Base registry key for storing remediation state [do not modify]
+$exitCode           = 0                             # Intitalize exit code for compliance [do not modify]
+$RunId = [guid]::NewGuid().ToString()               # Generates a new Correlation Id (CID) on every run [do not modify]
+$detectionOutput = [System.Collections.Generic.List[string]]::new() # Detection output to display in Intune admin center [do not modify]
+$StartTime          = Get-Date                      # Record script execution start time [do not modify]
+Restart-64Bit                                       # Ensure we are running as a 64-bit process on an x64 system [do not modify]   
+$RunCount = Increment-RemediationRunCount -LogName $logName # Keep track of how many times this script has run [do not modify]
+if ($verboseLogging) { Start-Transcript -Path (Join-Path $logPath "${logName}_verbose.log") -Append }  
+Write-Log "*****    Starting remediation script actions.    *****" 
+Write-Log "Remediation script version: $scriptVersion." -Component "Version"
 Write-Log "RunId: $RunId" 
 Write-Log "Remediation Run Count: $RunCount"
+# -------------------------------------
+#endregion Do Not Modify
 
-# Get startup type via WMI/Win32_Service
 try {
-    $service = Get-Service -Name $ServiceName
-    if (-not $service) {
-        Write-Log "[FAIL] $ServiceName Service missing." -Type 3
-        exit 2
-    }
 
-    $svcConfig = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop  
-    if (-not $svcConfig) {
-        Write-Log -Message "Service config unavailable — cannot remediate." -Type 3
-        exit 2
-    }
+    <#  INSTRUCTIONS:
+    For any remediation failures:
+     - Set $exitCode = 1 for remediation failures.
+     - Set $exitCode = 2 for script failures.
+     - Add -StdOut at the end of the Write-Log commands to append issues in the registry checkpoint RemediationDetails value
+    
+    # ----------------------------------------------------
+    # --------- Your remediation logic goes here ---------  
+    # --------------------------------------------------#>
 
-    # 1. Fix startup type (idempotent)
-    if ($svcConfig.StartMode -notin @("Auto", "Automatic")) { # CIM reports 'Auto'; ChangeStartMode accepts 'Automatic'
-        Write-Log "Changing StartMode from $($svcConfig.StartMode) to Automatic."
-        try {
-            $changeResult = Invoke-CimMethod -InputObject $svcConfig -MethodName ChangeStartMode -Arguments @{ StartMode = 'Automatic' }
-            if ($changeResult.ReturnValue -ne 0) {
-                throw "ChangeStartMode failed with return value $($changeResult.ReturnValue)."
-            }
-            $svcConfig = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop
-        } catch {
-            Write-Log "$_" -Type 3
-            exit 1
-        }
-    }
+    
 
-    # 2. Ensure service is running (idempotent)
-    Write-Log "Verifying the $ServiceName Service is running."
-    $service = Get-Service -Name $ServiceName
-    if (-not $service) {
-        Write-Log "The $ServiceName Service disappeared after StartMode change — aborting." -Type 3
-        exit 1
-    }
 
-    if ($service.Status -ne 'Running') { # e.g. 'Running', 'Stopped'
-        Write-Log "The $ServiceName Service is not running (current state: $($service.Status))." -Type 2
-        try {
-            Start-Service -Name $ServiceName -ErrorAction Stop
-            $service = Get-Service -Name $ServiceName
-            $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
-            $service = Get-Service -Name $ServiceName
-        } catch {
-            Write-Log "$_" -Type 3
-            exit 2
-        }
-    }
 
-    # 3. Post-check for telemetry and confidence
-    if ($svcConfig.StartMode -eq "Auto" -and
-        $service.Status -eq "Running") {
-        Write-Log "Remediation successful. The $ServiceName Service now starts automatically and is running." 
-        exit 0
-    } else {
-        Write-Log "Remediation failed — service not in desired state." -Type 3
-        $RemediationSucceeded = $false
-        exit 1
-    }
-} catch {
-    Write-Log "$_" -Type 3
-    Exit 2
-} finally {
-    $EndTime = Get-Date
-    Remediation-Result -logName $logName -ScriptVersion $ScriptVersion -StartTime $StartTime -EndTime $EndTime -RunId $RunId
+    # ----------------------------------------------------
+    # ---------   End of your remediation logic  --------- 
+    # ----------------------------------------------------
+
+} catch { # * DO NOT MODIFY  *
+    $exitCode = 2
+    Write-Log "[ERROR] $($_.Exception.Message)" -Type 3 -StdOut
+    Write-Log "*****     End of remediation script actions.     *****"
+} finally { # * DO NOT MODIFY  *
+   $EndTime = Get-Date
+  # Create registry checkpoint for remediation results
+    Remediation-Result -logName $logName -ScriptVersion $ScriptVersion -StartTime $StartTime -EndTime $EndTime -RunId $RunId -exitCode $exitCode
     if ($verboseLogging) { Stop-Transcript }
 }

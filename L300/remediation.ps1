@@ -40,7 +40,7 @@ function Write-Log {
     $Time = $now.ToString('HH:mm:ss.ffffff', [System.Globalization.CultureInfo]::InvariantCulture)
     $Date = $now.ToString('MM-dd-yyyy',      [System.Globalization.CultureInfo]::InvariantCulture)
   # Escape message for CMTrace payload (XML-like). SecurityElement.Escape handles &, <, >, " (quotes) safely
-    $escapedMessage = [System.Security.SecurityElement]::Escape($Message)
+    $escapedMessage = [System.Security.SecurityElement]::Escape($Message).Replace('&apos;', "'")
   # Identify if it was a function that called Log and make it the component"
     $scriptFullPath = $PSCommandPath ; $scriptName = Split-Path -Path $scriptFullPath -Leaf
     $caller = (Get-PSCallStack)[1].Command
@@ -88,91 +88,81 @@ function Restart-64Bit {
 
 #endregion Helpers
 
-#region Config
-$logPath            = "$env:SystemDrive\Logs\IR"    # Ensure this path is pulled with Intune collects diagnostics
-$logName            = "UsoSvcRemediation"           # Name of the log file
-$ScriptVersion      = "1.0.0"                       # Script version
-$ServiceName        = "UsoSvc"                      # Service name to check
-$InteractiveLogging = $true                         # Display console output for testing 
-
-# --- General Configuration ---
-$ErrorActionPreference  = 'Stop'                    # Ensures try/catch works reliably
-$RemediationSucceeded   = $true                     # Intitalize remediation state
-Restart-64Bit                                       # Ensure we are running as a 64-bit process on an x64 system    
-#endregion Config
+# ---      Script Configuration     ---
+$ErrorActionPreference  = 'Stop'                        # Ensures try/catch works reliably
+$logPath                = "$env:SystemDrive\Logs\IR"    # Ensure this path is pulled with Intune collects diagnostics
+$logName                = "UsoSvcRemediation"           # Name of the log file
+$ScriptVersion          = "1.0.0"                       # Script version
+$InteractiveLogging     = $true                         # Display console output for testing 
+Restart-64Bit                                           # Ensure we are running as a 64-bit process on an x64 system    
+# -------------------------------------
 
 #---------------------------------------------- BEGIN ----------------------------------------------|
 
-Write-Log "*****    Starting remediation for service $ServiceName.    *****" 
+Write-Log "*****    Starting remediation script actions.    *****" 
 Write-Log "Remediation script version: $ScriptVersion." -Component "Version"
 
-# Get startup type via WMI/Win32_Service
-try {
-    $service = Get-Service -Name $ServiceName
-    if (-not $service) {
-        Write-Log "[FAIL] $ServiceName Service missing." -Type 3
-        exit 2
-    }
+# Service name to check
+$ServiceName = "UsoSvc1"
+# Update Orchestrator Service. Manages Windows Updates. If stopped, 
+# your devices will not be able to download and install the latest updates.
 
+try {
+
+  # Get startup type via WMI/Win32_Service
     $svcConfig = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop  
     if (-not $svcConfig) {
-        Write-Log -Message "Service config unavailable — cannot remediate." -Type 3
-        exit 2
-    }
-
-    # 1. Fix startup type (idempotent)
-    if ($svcConfig.StartMode -notin @("Auto", "Automatic")) { # CIM reports 'Auto'; ChangeStartMode accepts 'Automatic'
-        Write-Log "Changing StartMode from $($svcConfig.StartMode) to Automatic."
-        try {
-            $changeResult = Invoke-CimMethod -InputObject $svcConfig -MethodName ChangeStartMode -Arguments @{ StartMode = 'Automatic' }
-            if ($changeResult.ReturnValue -ne 0) {
-                throw "ChangeStartMode failed with return value $($changeResult.ReturnValue)."
+        Write-Log -Message "Service config unavailable — can not remediate." -Type 3 -StdOut
+    } else {
+        # 1. Fix startup type (idempotent)
+        if ($svcConfig.StartMode -notin @("Auto", "Automatic")) { # CIM reports 'Auto'; ChangeStartMode accepts 'Automatic'
+            Write-Log "Changing StartMode from $($svcConfig.StartMode) to Automatic."
+            try {
+                $changeResult = Invoke-CimMethod -InputObject $svcConfig -MethodName ChangeStartMode -Arguments @{ StartMode = 'Automatic' }
+                if ($changeResult.ReturnValue -ne 0) {
+                    throw "ChangeStartMode failed with return value $($changeResult.ReturnValue)."
+                }
+                $svcConfig = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop
+            } catch {
+                Write-Log "$($_.Exception.Message)" -Type 3
+                exit 1
             }
-            $svcConfig = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop
-        } catch {
-            Write-Log "$_" -Type 3
+        }
+
+        # 2. Ensure service is running (idempotent)
+        Write-Log "Verifying the $ServiceName Service is running."
+        $service = Get-Service -Name $ServiceName
+        if (-not $service) {
+            Write-Log "The $ServiceName Service disappeared after StartMode change — aborting." -Type 3
+            exit 1
+        }
+
+        if ($service.Status -ne 'Running') { # e.g. 'Running', 'Stopped'
+            Write-Log "The $ServiceName Service is not running (current state: $($service.Status))." -Type 2
+            try {
+                Start-Service -Name $ServiceName -ErrorAction Stop
+                $service = Get-Service -Name $ServiceName
+                $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
+                $service = Get-Service -Name $ServiceName
+            } catch {
+                Write-Log "$($_.Exception.Message)" -Type 3
+                exit 2
+            }
+        }
+
+        # 3. Post-check for telemetry and confidence
+        if ($svcConfig.StartMode -eq "Auto" -and
+            $service.Status -eq "Running") {
+            Write-Log "Remediation successful — the $ServiceName Service starts automatically and is running." 
+            exit 0
+        } else {
+            Write-Log "Remediation failed — service not in desired state." -Type 3
             exit 1
         }
     }
-
-    # 2. Ensure service is running (idempotent)
-    Write-Log "Verifying the $ServiceName Service is running."
-    $service = Get-Service -Name $ServiceName
-    if (-not $service) {
-        Write-Log "The $ServiceName Service disappeared after StartMode change — aborting." -Type 3
-        exit 1
-    }
-
-    if ($service.Status -ne 'Running') { # e.g. 'Running', 'Stopped'
-        Write-Log "The $ServiceName Service is not running (current state: $($service.Status))." -Type 2
-        try {
-            Start-Service -Name $ServiceName -ErrorAction Stop
-            $service = Get-Service -Name $ServiceName
-            $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
-            $service = Get-Service -Name $ServiceName
-        } catch {
-            Write-Log "$_" -Type 3
-            exit 2
-        }
-    }
-
-    # 3. Post-check for telemetry and confidence
-    if ($svcConfig.StartMode -eq "Auto" -and
-        $service.Status -eq "Running") {
-        Write-Log "Remediation successful — the $ServiceName Service starts automatically and is running." 
-        exit 0
-    } else {
-        Write-Log "Remediation failed — service not in desired state." -Type 3
-        $RemediationSucceeded = $false
-        exit 1
-    }
 } catch {
-    Write-Log "$_" -Type 3
+    Write-Log "$($_.Exception.Message)" -Type 3
     Exit 2
 } finally {
-    If ($RemediationSucceeded) {
-        Write-Log "Remediation successful." 
-    } else {
-        Write-Log "Remediation unsuccessful." -Type 3
-    }
+    Write-Log "*****     End of remediation script actions.     *****"
 }
