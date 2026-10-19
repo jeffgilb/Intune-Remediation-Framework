@@ -135,7 +135,6 @@ try {
         if (Test-Path $LogFile) { Remove-Item -Path $LogFile -Force }
         exit 0
     } else {
-        Write-Log "[FAIL] The $ServiceName Service is non-compliant." -Type 3 -StdOut
         Write-Log "*****      End of detection script actions.      *****"  -Component "Detection End"
         exit 1
     }

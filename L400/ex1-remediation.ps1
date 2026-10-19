@@ -217,9 +217,9 @@ function Remediation-Result {
 # * MODIFY THESE AS NEEDED *
 $scriptVersion      = "1.0.0"                       # Script version
 $logPath            = "$env:SystemDrive\Logs\IR"    # Log path must match the path in the detection script
-$logName            = "template"                    # Log name must match the name in the detection script
+$logName            = "contoso"                    # Log name must match the name in the detection script
 $stateKey           = "HKLM:\SOFTWARE\IntuneRemediations" # Regkey must match the regkey in the detection script
-$interactiveLogging = $false                        # Display console output for troubleshooting
+$interactiveLogging = $true                        # Display console output for troubleshooting
 $verboseLogging     = $false                        # Enables script transcript for troubleshooting
 # -------------------------------------
 

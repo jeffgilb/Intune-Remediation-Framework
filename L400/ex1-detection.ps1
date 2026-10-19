@@ -213,9 +213,9 @@ function Remove-ExpiredRemediationLog {
 # * MODIFY THESE AS NEEDED *
 $ScriptVersion          = "1.0.0"                               # Version of the script
 $logPath                = "$env:SystemDrive\Logs\IR"            # Ensure this path is pulled with Intune collects diagnostics
-$logName                = "template"                            # Name of the log file
+$logName                = "contoso"                             # Name of the log file
 $StateKey               = "HKLM:\SOFTWARE\IntuneRemediations"   # Base registry key for storing remediation state
-$InteractiveLogging     = $false                                # Enable/disable display console output for troubleshooting
+$InteractiveLogging     = $true                                 # Enable/disable display console output for troubleshooting
 $verboseLogging         = $false                                # Enable/disable script transcript for troubleshooting
 $retainDays             = 30                                    # How long to retain logs after a successful remediation has run (default is 30 days)
 # -------------------------------------

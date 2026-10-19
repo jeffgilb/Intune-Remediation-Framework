@@ -102,12 +102,13 @@ Restart-64Bit                                           # Ensure we are running 
 Write-Log "*****    Starting remediation script actions.    *****" 
 Write-Log "Remediation script version: $ScriptVersion." -Component "Version"
 
-# Service name to check
-$ServiceName = "UsoSvc1"
-# Update Orchestrator Service. Manages Windows Updates. If stopped, 
-# your devices will not be able to download and install the latest updates.
+
 
 try {
+    # Service name to check
+    $ServiceName = "UsoSvc"
+    # Update Orchestrator Service. Manages Windows Updates. If stopped, 
+    # your devices will not be able to download and install the latest updates.
 
   # Get startup type via WMI/Win32_Service
     $svcConfig = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop  
