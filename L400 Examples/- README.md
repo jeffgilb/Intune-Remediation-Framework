@@ -75,9 +75,20 @@ Intune Remediation remediation script template. This script template provides a 
 The following examples are based on the templates with the same features.
 
 ### Contoso Registry Value Check
-- **contoso-detection**. Ensures HKLM:\SOFTWARE\Contoso\Settings\Enabled is a DWORD with value 1.
+- **contoso-detection**. Ensures *HKLM:\SOFTWARE\Contoso\Settings\Enabled* is a DWORD with value 1.
 Logs the remediation and records its result and run metadata in the
 configured Intune remediation state registry key.
-- **contoso-remediation**. Ensures HKLM:\SOFTWARE\Contoso\Settings\Enabled is a DWORD with value 1.
+- **contoso-remediation**. Ensures *HKLM:\SOFTWARE\Contoso\Settings\Enabled* is a DWORD with value 1.
 Logs the remediation and records its result and run metadata in the
 configured Intune remediation state registry key.
+
+### Custom Log Location Collection
+- **logCollection-detection**. Verifies custom log collection entries have been configured.
+This script checks the following registry path: *HKLM:\SOFTWARE\Microsoft\MdmDiagnostics\Area\Autopilot\FileEntry*.
+It verifies that specific REG_DWORD value names (log path wildcard entries) exist and that each value is
+configured with decimal value 255 (maximum diagnostic collection). If any required registry key or value is
+missing, unreadable, or misconfigured, the script exits with a non-zero code, triggering remediation.
+- **logCollection-remediation**. Creates required Autopilot MDM Diagnostics custom log collection registry entries.
+The script validates and enforces the presence of the following registry key: *HKLM:\SOFTWARE\Microsoft\MdmDiagnostics\Area\Autopilot\FileEntry*.
+If the key does not exist, it is created. If required registry values are missing, they are created as REG_DWORD
+entries with a decimal value of 255, enabling maximum diagnostic log collection. Existing registry values are not modified.
