@@ -74,21 +74,31 @@ Intune Remediation remediation script template. This script template provides a 
 ## Example Remediations
 The following examples are based on the templates with the same features.
 
+### Check Wallpaper Download
+- **CheckWallpaperDownload-detection**. Detects a non-compliant wallpaper download state for Windows Personalization CSP.
+This Intune detection script reads the DesktopImageStatus value under *HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP*
+and flags the device as non-compliant when the wallpaper has not downloaded and applied successfully. It records detection state to the registry,
+writes CMTrace-compatible log entries, and can clean up stale remediation logs once issues are resolved.
+- **CheckWallpaperDownload-remediation**. Remediates a non-compliant wallpaper configuration by resetting the Windows Personalization CSP state.
+This Intune remediation script checks the DesktopImageStatus value under *HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP*.
+If the value is not compliant, the script removes the personalization registry key, triggers the EnterpriseMgmt scheduled task sync,
+and validates that DesktopImageStatus returns to 1.
+
 ### Contoso Registry Value Check
-- **contoso-detection**. Ensures *HKLM:\SOFTWARE\Contoso\Settings\Enabled* is a DWORD with value 1.
+- **ContosoReg-detection**. Ensures *HKLM:\SOFTWARE\Contoso\Settings\Enabled* is a DWORD with value 1.
 Logs the remediation and records its result and run metadata in the
 configured Intune remediation state registry key.
-- **contoso-remediation**. Ensures *HKLM:\SOFTWARE\Contoso\Settings\Enabled* is a DWORD with value 1.
+- **ContosoReg-remediation**. Ensures *HKLM:\SOFTWARE\Contoso\Settings\Enabled* is a DWORD with value 1.
 Logs the remediation and records its result and run metadata in the
 configured Intune remediation state registry key.
 
 ### Custom Log Location Collection
-- **logCollection-detection**. Verifies custom log collection entries have been configured.
+- **CustomLogCollection-detection**. Verifies custom log collection entries have been configured.
 This script checks the following registry path: *HKLM:\SOFTWARE\Microsoft\MdmDiagnostics\Area\Autopilot\FileEntry*.
 It verifies that specific REG_DWORD value names (log path wildcard entries) exist and that each value is
 configured with decimal value 255 (maximum diagnostic collection). If any required registry key or value is
 missing, unreadable, or misconfigured, the script exits with a non-zero code, triggering remediation.
-- **logCollection-remediation**. Creates required Autopilot MDM Diagnostics custom log collection registry entries.
+- **CustomLogCollection-remediation**. Creates required Autopilot MDM Diagnostics custom log collection registry entries.
 The script validates and enforces the presence of the following registry key: *HKLM:\SOFTWARE\Microsoft\MdmDiagnostics\Area\Autopilot\FileEntry*.
 If the key does not exist, it is created. If required registry values are missing, they are created as REG_DWORD
 entries with a decimal value of 255, enabling maximum diagnostic log collection. Existing registry values are not modified.

@@ -11,6 +11,7 @@
     - Remediation run counter
     - Remediation result tracking in the registry
     - Transcript logging support for troubleshooting
+    - Automatic stale log clean-up
 
     Registry Checkpoint Location:
         HKLM:\SOFTWARE\IntuneRemediations\<LogName>
@@ -29,13 +30,13 @@
         - Script version
         - Script exit code
 
+Intune Output:
+Messages logged with the -StdOut switch are returned to the Intune admin center.
+
 Exit Codes:
 0 = Compliant
 1 = Non-compliant
 2 = Error encountered
-
-Intune Output:
-Messages logged with the -StdOut switch are returned to the Intune admin center.
 #>
 
 #region Logging

@@ -1,18 +1,51 @@
-<#
+﻿<#
 .SYNOPSIS
-    Sets the Contoso registry setting to its compliant value.
+    Remediates a non-compliant wallpaper configuration by resetting the Windows Personalization CSP state.
 
 .DESCRIPTION
-    Ensures HKLM:\SOFTWARE\Contoso\Settings\Enabled is a DWORD with value 1.
-    Logs the remediation and records its result and run metadata in the
-    configured Intune remediation state registry key.
+    This Intune remediation script checks the DesktopImageStatus value under
+    HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP. If the value is not compliant,
+    the script removes the personalization registry key, triggers the EnterpriseMgmt scheduled task sync,
+    and validates that DesktopImageStatus returns to 1.
+
+.FEATURES
+    - CMTrace-compatible logging
+    - Automatic relaunch in 64-bit PowerShell when required
+    - Remediation run counter
+    - Remediation result tracking in the registry
+    - Transcript logging support for troubleshooting
 
 .NOTES
-    Configure the script settings to match the associated detection script.
+    Registry Location:
+        HKLM:\SOFTWARE\IntuneRemediations\Check-WallpaperDownload
+
+    Log File:
+        <SystemDrive>\Logs\IR\Check-WallpaperDownload.log
+
+    Verbose Log File (optional):
+        <SystemDrive>\Logs\IR\Check-WallpaperDownload_verbose.log
+
+    Recorded Metadata:
+        - RunId (correlation identifier)
+        - RunCount
+        - Remediation result
+        - Runtime duration
+        - Remediation timestamps
+        - Last detection failure details
+        - Script version
+
+    Version: 1.0.0
+    Author: Jeff Gilbert
+
+.EXIT CODES
+    0 = Remediation successful
+    1 = Remediation failed
+    2 = Error encountered
 #>
 
+
 #region Logging
-# Template logging function for the Intune remediation script
+# Template logging function for the Intune detection script
 # * DO NOT MODIFY  *
 function Write-Log {
 
@@ -73,7 +106,7 @@ function Restart-64Bit {
     # If we are running as a 32-bit process on an x64 system, re-launch as a 64-bit process first
     if ("$env:PROCESSOR_ARCHITEW6432" -ne "ARM64") {
         if (Test-Path "$($env:WINDIR)\SysNative\WindowsPowerShell\v1.0\powershell.exe") {
-            & "$(C:\WINDOWS)\SysNative\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy bypass -NoProfile -File "$PSCommandPath"
+            & "$($env:WINDIR)\SysNative\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy bypass -NoProfile -File "$PSCommandPath"
             Exit $lastexitcode
             }
         }
@@ -118,8 +151,8 @@ function Remediation-Result {
         [string]$LastRemediationResult,
         [datetime]$StartTime,
         [datetime]$EndTime = (Get-Date),
-        [string]$Details = "".
-        [string]$exitCode
+        [string]$Details = "",
+        [string]$exitCode           
     )
 
     try {
@@ -129,7 +162,7 @@ function Remediation-Result {
 
         $LastDetectionFailure = (Get-ItemProperty -Path $baseKey -Name "DetectionState" -ErrorAction SilentlyContinue).DetectionState
 
-        if ($RemediationSucceeded -ne $true) {
+        if ($exitCode -ne 0) {
             $RemediationResult = "Fail"
             $RemediationDetails = ($detectionOutput -join " | ")
         } else {
@@ -164,7 +197,7 @@ function Remediation-Result {
             -Value ([int]$script:RunCount) `
             -PropertyType DWord `
             -Force | Out-Null
-
+    
         Write-Log "Registry checkpoint updated: $baseKey"
         Write-Log "*****     End of remediation script actions.     *****"
     }
@@ -189,9 +222,9 @@ function Remediation-Result {
 # * MODIFY THESE AS NEEDED *
 $scriptVersion      = "1.0.0"                       # Script version
 $logPath            = "$env:SystemDrive\Logs\IR"    # Log path must match the path in the detection script
-$logName            = "contoso"                    # Log name must match the name in the detection script
+$logName            = "Check-WallpaperDownload"     # Log name must match the name in the detection script
 $stateKey           = "HKLM:\SOFTWARE\IntuneRemediations" # Regkey must match the regkey in the detection script
-$interactiveLogging = $true                        # Display console output for troubleshooting
+$interactiveLogging = $false                        # Display console output for troubleshooting
 $verboseLogging     = $false                        # Enables script transcript for troubleshooting
 # -------------------------------------
 
@@ -216,55 +249,80 @@ Write-Log "Remediation Run Count: $RunCount"
 
 try {
 
-    <#  INSTRUCTIONS:
-    For any remediation failures:
-     - Set $exitCode = 1 for remediation failures.
-     - Set $exitCode = 2 for script failures.
-     - Add -StdOut at the end of the Write-Log commands to append issues in the registry checkpoint RemediationDetails value
-    
-    # ----------------------------------------------------
-    # --------- Your remediation logic goes here ---------  
-    # --------------------------------------------------#>
+    $Path = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP"
 
-    # example:
-    $RegPath = "HKLM:\SOFTWARE\Contoso\Settings"
-    $ValueName = "Enabled"
+        if (Test-Path $Path) {
+        Get-ItemProperty -Path $Path |
+        Select-Object DesktopImageStatus, DesktopImagePath, DesktopImageUrl
 
-    if (-not (Test-Path $RegPath)) {
-      # Create the registry key if it does not exist
-        Write-Log "Contoso settings registry key not found." -Type 2
-        New-Item -Path $RegPath -Force | Out-Null
+        Write-Log "Current DesktopImagePath: $((Get-ItemProperty -Path $Path).DesktopImagePath)"
+        Write-Log "Current DesktopImageStatus: $((Get-ItemProperty -Path $Path).DesktopImageStatus)"
+        Write-Log "Current DesktopImageUrl: $((Get-ItemProperty -Path $Path).DesktopImageUrl)"
+       
+        If ((Get-ItemProperty -Path $Path).DesktopImageStatus -ne 1) {
+          # DesktopImageStatus is not compliant, initiating remediation steps.
+            Write-Log "[FAIL] DesktopImageStatus is not set to 1." -Type 3
+                  
+            Write-Log "Removing personalization registry key due to non-compliant DesktopImageStatus." -Type 2
+            Remove-Item -Path $Path 
+            
+            Start-Sleep -Seconds 2
 
-      # Validate the regkey was successfully created
-        If (-not (Test-Path $RegPath)) {
-            Write-Log "Failed to create Contoso settings registry key." -Type 3 -StdOut
-            $RemediationSucceeded = $false
-            $exitCode = 1
-        } else {
-            Write-Log "Contoso settings registry key successfully created."
+            If (-not (Test-Path $Path)) {
+                Write-Log "Personalization registry key successfully removed." -Type 2
+            } else {
+                Write-Log "Failed to remove personalization registry key." -Type 3 -StdOut
+                $exitCode = 1
+            }
+            
+          # Trigger Intune MDM sync
+            Get-ScheduledTask |
+                Where-Object {$_.TaskPath -like "\Microsoft\Windows\EnterpriseMgmt\*"} |
+                Where-Object {$_.TaskName -like "Schedule*"} |
+                Start-ScheduledTask
+
+          # Post-check for telemetry and confidence
+            Write-Log "Post-check: Verifying Personalization registry key has been re-created and populated successfully." 
+            $MaxAttempts = 10
+            $IntervalSeconds = 60
+            $Success = $false
+            for ($Attempt = 1; $Attempt -le $MaxAttempts; $Attempt++) {
+                Write-Log "RegKey Remediation Validation attempt $Attempt of $MaxAttempts."
+                if (Test-Path $Path) {
+                    $Personalization = Get-ItemProperty -Path $Path -ErrorAction SilentlyContinue
+                    Write-Log "DesktopImageStatus: $($Personalization.DesktopImageStatus)"
+                    Write-Log "DesktopImagePath: $($Personalization.DesktopImagePath)"
+                    Write-Log "DesktopImageUrl: $($Personalization.DesktopImageUrl)"
+
+                    if ($Personalization.DesktopImageStatus -eq 1) {
+                        Write-Log "Post-check validation passed (DesktopImageStatus is set to 1)."
+                        $Success = $true
+                        break
+                    }
+                    Write-Log "DesktopImageStatus is '$($Personalization.DesktopImageStatus)'. Waiting for next check."
+                }
+                else {
+                    Write-Log "Personalization registry key not found. Waiting for next check."
+                }
+                if ($Attempt -lt $MaxAttempts) {
+                    Start-Sleep -Seconds $IntervalSeconds
+                }
+            }
+                
+            if (-not $Success) {
+                Write-Log "[FAIL] Post-check validation failed after $MaxAttempts attempts. DesktopImageStatus not found or never became 1." -Type 3  -StdOut
+                $exitCode = 1
+            } else {
+                Write-Log "[PASS] Post-check validation passed (DesktopImageStatus is set to 1)." -StdOut
+                $exitCode = 0
+                Exit 0
+            }
         }
-    }
-    
-    if ((Get-ItemProperty -Path $RegPath).$ValueName -ne 1) {
-      # Create the registry value if it does not exist
-        New-ItemProperty -Path $RegPath -Name $ValueName -Value 1 -PropertyType DWord -Force | Out-Null
-
-      # Validate the registry value was successfully created
-        If ((Get-ItemProperty -Path $RegPath).$ValueName -ne 1) {
-            Write-Log "Failed to set $ValueName to 1 in $RegPath." -Type 3 -StdOut
-            $RemediationSucceeded = $false
-            $exitCode = 1
-        } else {
-            Write-Log "$($ValueName) successfully set to 1 in $RegPath."
-            $RemediationSucceeded = $true
-        }
-    } else {
-        Write-Log "$ValueName is already set to 1 in $RegPath."
-    }
-
-    # ----------------------------------------------------
-    # ---------   End of your remediation logic  --------- 
-    # ----------------------------------------------------
+    } else { 
+        Write-Log "[FAIL] Personalization registry key not found." -Type 3 -StdOut
+        $exitCode = 2
+        Exit 2
+    } 
 
 } catch { # * DO NOT MODIFY  *
     $exitCode = 2

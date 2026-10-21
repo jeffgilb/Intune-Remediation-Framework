@@ -18,6 +18,7 @@
     - Remediation run counter
     - Remediation result tracking in the registry
     - Transcript logging support for troubleshooting
+    - Automatic stale log clean-up
 
     Registry Checkpoint Location:
         HKLM:\SOFTWARE\IntuneRemediations\CustomLogCollection

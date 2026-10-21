@@ -21,7 +21,7 @@
         <SystemDrive>\Logs\IR\<LogName>.log
 
     Verbose Log File (optional):
-        <SystemDrive>\Logs\IR\CustomLogCollection_verbose.log
+        <SystemDrive>\Logs\IR\<LogName>_verbose.log
 
     Recorded Metadata:
         - RunId (correlation identifier)
