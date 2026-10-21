@@ -1,26 +1,27 @@
 ﻿<#
 .SYNOPSIS
-    Standard Intune Remediation Script Template with CMTrace-compatible logging 
-    and registry checkpoint reporting.
+Detects whether the Windows Update service (wuauserv) is configured and running as expected.
 
 .DESCRIPTION
-    This script template provides a starting point for creating Intune Remediation scripts.
+Validates that the Windows Update service exists, is configured for Automatic startup,
+and is currently Running. Results are logged in CMTrace format, recorded in a registry checkpoint,
+and summarized to the Intune admin center. 
 
 .FEATURES
     - CMTrace-compatible logging
     - Automatic relaunch in 64-bit PowerShell when required
     - Remediation run counter
     - Remediation result tracking in the registry
-    - Transcript logging support for troubleshooting
+    - Verbose transcript logging support for troubleshooting
 
 .NOTES
-    Registry Location:
+    Registry Checkpoint Location:
         HKLM:\SOFTWARE\IntuneRemediations\<LogName>
 
     Log File:
         <SystemDrive>\Logs\IR\<LogName>.log
 
-    Recorded Metadata:
+    Registry Checkpoint Values:
         - RunId (correlation identifier)
         - RunCount
         - Remediation result
@@ -36,7 +37,6 @@
     0 = Remediation successful
     1 = Remediation failed
     2 = Error encountered
-
 #>
 
 #region Logging

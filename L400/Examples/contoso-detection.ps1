@@ -1,33 +1,14 @@
-﻿<# 
+<#
 .SYNOPSIS
-    Intune Remediation detection script template.
+    Checks whether the Contoso setting is compliant for Intune Remediations.
 
 .DESCRIPTION
-    This script template provides a starting point for creating Intune Remediation scripts.
-
-    The script includes helper functions for:
-      - CMTrace-style logging
-      - 64-bit PowerShell relaunch
-      - Detection result tracking in the registry
-      - Automatic cleanup of stale remediation logs
+    Checks HKLM:\SOFTWARE\Contoso\Settings\Enabled. Exit code 0 indicates
+    compliance, 1 indicates remediation is needed, and 2 indicates an error.
+    Detection details are logged and recorded under the configured remediation state key.
 
 .NOTES
-    Detection results are stored under:
-        HKLM:\SOFTWARE\IntuneRemediations\<LogName>
-
-    Log File: (deleted if remediation script isn't triggered)
-        <SystemDrive>\Logs\IR\<LogName>.log
-
-    Detection output written with the -StdOut switch is displayed in the
-    Intune admin center.
-
-    Version: 1.0.0
-    Author: Jeff Gilbert
-
-.EXIT CODES
-    0 = Compliant
-    1 = Non-compliant (remediation required)
-    2 = Error encountered
+    Configure the detection and logging settings in the Script Configuration section.
 #>
 
 #region Logging
@@ -161,8 +142,7 @@ function Remove-ExpiredRemediationLog {
         return
     }
         
-    $BaseKey = Join-Path -Path $StateKey -ChildPath $logName
-
+	$BaseKey = Join-Path -Path $StateKey -ChildPath $logName
 	if (-not (Test-Path -LiteralPath $BaseKey)) {
     	Remove-Item -LiteralPath $LogFile -Force
         return
@@ -214,9 +194,9 @@ function Remove-ExpiredRemediationLog {
 # * MODIFY THESE AS NEEDED *
 $ScriptVersion          = "1.0.0"                               # Version of the script
 $logPath                = "$env:SystemDrive\Logs\IR"            # Ensure this path is pulled with Intune collects diagnostics
-$logName                = "UsoSvcRemediation"                   # Name of the log file
+$logName                = "contoso"                             # Name of the log file
 $StateKey               = "HKLM:\SOFTWARE\IntuneRemediations"   # Base registry key for storing remediation state
-$InteractiveLogging     = $true                                # Enable/disable display console output for troubleshooting (DO NOT deploy as $true)
+$InteractiveLogging     = $true                                 # Enable/disable display console output for troubleshooting
 $verboseLogging         = $false                                # Enable/disable script transcript for troubleshooting
 $retainDays             = 30                                    # How long to retain logs after a successful remediation has run (default is 30 days)
 # -------------------------------------
@@ -230,7 +210,7 @@ $exitCode               = 0                                     # Intitalize exi
 $StartTime              = Get-Date                              # Record script execution start time [do not modify]
 $detectionOutput = [System.Collections.Generic.List[string]]::new() # Detection output to display in Intune admin center [do not modify]
 Restart-64Bit                                                   # Ensure we are running as a 64-bit process on an x64 system [do not modify]
-if ($verboseLogging) { Start-Transcript -Path (Join-Path $logPath "${logName}_verbose.log") -Append }  
+if ($verboseLogging) { Start-Transcript -Path (Join-Path $logPath "${logName}_verbose.log") -Append}  
 Write-Log "*****      Starting detection script actions.     *****"  -Component 'Detection Begin'
 Write-Log "Detection script version: $ScriptVersion" -Component 'Version'
 # -------------------------------------
@@ -248,34 +228,39 @@ try {
     # --------- Your detection logic starts here ---------  
     # --------------------------------------------------#>
 
-    # Service name to check
-    $ServiceName = "UsoSvc"
-    # Update Orchestrator Service. Manages Windows Updates. If stopped, 
-    # your devices will not be able to download and install the latest updates.
+    # example:
+    $RegPath = "HKLM:\SOFTWARE\Contoso\Settings"
+    $ValueName = "Enabled"
 
-    # Get startup type via WMI/Win32_Service
-        $svcConfig = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop  
-        if (-not $svcConfig) {
-            Write-Log -Message "Service config unavailable — cannot remediate." -Type 3 -StdOut
-            $exitCode = 1
-        } else {
-            if ($svcConfig.StartMode -ne "Auto") { # e.g. 'Automatic', 'Manual', 'Disabled'
-                Write-Log "[FAIL] The $ServiceName StartMode is $($svcConfig.StartMode) (expected Auto)" -Type 3 -StdOut
-                $exitCode = 1
-            }
-            if ($svcConfig.State -ne "Running") { # e.g. 'Running', 'Stopped'
-                Write-Log "[FAIL] The $ServiceName Service state is $($svcConfig.State) (expected Running)" -Type 3 -StdOut
-                $exitCode = 1
-            }
+    $Path = Get-Item -Path $RegPath -ErrorAction SilentlyContinue
+    if (-not $Path) {
+        Write-Log "[FAIL] Registry key $($RegPath) is missing." -Type 3 -StdOut
+        $exitCode = 1
+    } else {
+        $Value = Get-ItemPropertyValue -Path $RegPath -Name $ValueName -ErrorAction SilentlyContinue
+        if ($null -ne $Value) {
+            # This Write-Log line adds the registry value to the log, but doesn't add it to the Intune detection output (no -StdOut parameter).
+            Write-Log "Retrieved $($ValueName) registry value: $($Value)"
         }
+
+        if ($Value -ne 1) {
+            # This Write-Log line is written to the log, displays as an error in the console, and is included in the Intune admin center's detection output.
+            Write-Log "[FAIL] $($ValueName) registry value is incorrect or missing." -Type 3 -StdOut
+            # Set compliance state to false since the registry value is not as expected and trigger remediation from the Compliance Result section below.
+            $exitCode = 1
+        }
+    }
 
     # ----------------------------------------------------
     # ----------   End of your detection logic  ----------  
     # ----------------------------------------------------
-    
+
   # Compliance Result * DO NOT MODIFY  *
     if ($exitCode -eq 0) { # Log will not be saved if there are no issues to log and the device hasn't been non-compliant recently.
         Write-Log "[PASS] The device is compliant." -StdOut # Intune detection output 
+        exit $exitCode
+    } elseif ($exitCode -eq 2){ # Script failure
+        Write-Log "[FAIL] The device is non-compliant due to a script failure." -Type 3 -StdOut
         exit $exitCode
     } else { # Device is not compliant
         Write-Log "[FAIL] The device is non-compliant."
@@ -294,4 +279,3 @@ try {
     Write-Output ($detectionOutput -join " | ")     # Intune detection output
     if ($verboseLogging) { Stop-Transcript }
 }
-

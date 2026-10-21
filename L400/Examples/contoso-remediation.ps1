@@ -1,42 +1,14 @@
 <#
 .SYNOPSIS
-    Standard Intune Remediation Script Template with CMTrace-compatible logging 
-    and registry checkpoint reporting.
+    Sets the Contoso registry setting to its compliant value.
 
 .DESCRIPTION
-    This script template provides a starting point for creating Intune Remediation scripts.
-
-.FEATURES
-    - CMTrace-compatible logging
-    - Automatic relaunch in 64-bit PowerShell when required
-    - Remediation run counter
-    - Remediation result tracking in the registry
-    - Transcript logging support for troubleshooting
+    Ensures HKLM:\SOFTWARE\Contoso\Settings\Enabled is a DWORD with value 1.
+    Logs the remediation and records its result and run metadata in the
+    configured Intune remediation state registry key.
 
 .NOTES
-    Registry Location:
-        HKLM:\SOFTWARE\IntuneRemediations\<LogName>
-
-    Log File:
-        <SystemDrive>\Logs\IR\<LogName>.log
-
-    Recorded Metadata:
-        - RunId (correlation identifier)
-        - RunCount
-        - Remediation result
-        - Runtime duration
-        - Remediation timestamps
-        - Last detection failure details
-        - Script version
-
-    Version: 1.0.0
-    Author: Jeff Gilbert
-
-.EXIT CODES
-    0 = Remediation successful
-    1 = Remediation failed
-    2 = Error encountered
-
+    Configure the script settings to match the associated detection script.
 #>
 
 #region Logging

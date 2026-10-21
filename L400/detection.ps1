@@ -1,33 +1,45 @@
-﻿<# 
+﻿<#
 .SYNOPSIS
-    Intune Remediation detection script template.
+Detects whether the Windows Update service (wuauserv) is configured and running as expected.
 
 .DESCRIPTION
-    This script template provides a starting point for creating Intune Remediation scripts.
-
-    The script includes helper functions for:
-      - CMTrace-style logging
-      - 64-bit PowerShell relaunch
-      - Detection result tracking in the registry
-      - Automatic cleanup of stale remediation logs
+Validates that the Windows Update service exists, is configured for Automatic startup,
+and is currently Running. Results are logged in CMTrace format, recorded in a registry checkpoint,
+and summarized to the Intune admin center. A log file is removed automatically when the device is compliant.
 
 .NOTES
-    Detection results are stored under:
+Version : 1.0.0
+Author  : Jeff Gilbert
+
+.FEATURES
+    - CMTrace-compatible logging
+    - Automatic relaunch in 64-bit PowerShell when required
+    - Remediation run counter
+    - Remediation result tracking in the registry
+    - Transcript logging support for troubleshooting
+
+    Registry Checkpoint Location:
         HKLM:\SOFTWARE\IntuneRemediations\<LogName>
 
-    Log File: (deleted if remediation script isn't triggered)
+    Log File:
         <SystemDrive>\Logs\IR\<LogName>.log
 
-    Detection output written with the -StdOut switch is displayed in the
-    Intune admin center.
+    Registry Checkpoint Values:
+        - Detection result
+        - Detection run time timestamps
+        - Runtime duration
+        - Detection results
+        - Script version
+        - Script exit code
 
-    Version: 1.0.0
-    Author: Jeff Gilbert
+Intune Output:
+Messages logged with the -StdOut switch are returned to the Intune admin center.
 
-.EXIT CODES
-    0 = Compliant
-    1 = Non-compliant (remediation required)
-    2 = Error encountered
+Exit Codes:
+0 = Compliant
+1 = Non-compliant
+2 = Error encountered
+
 #>
 
 #region Logging
@@ -214,9 +226,9 @@ function Remove-ExpiredRemediationLog {
 # * MODIFY THESE AS NEEDED *
 $ScriptVersion          = "1.0.0"                               # Version of the script
 $logPath                = "$env:SystemDrive\Logs\IR"            # Ensure this path is pulled with Intune collects diagnostics
-$logName                = "MyRemediation"                      # Name of the log file
+$logName                = "UsoSvcRemediation"                   # Name of the log file
 $StateKey               = "HKLM:\SOFTWARE\IntuneRemediations"   # Base registry key for storing remediation state
-$InteractiveLogging     = $false                                # Enable/disable display console output for troubleshooting (DO NOT deploy as $true)
+$InteractiveLogging     = $true                                # Enable/disable display console output for troubleshooting (DO NOT deploy as $true)
 $verboseLogging         = $false                                # Enable/disable script transcript for troubleshooting
 $retainDays             = 30                                    # How long to retain logs after a successful remediation has run (default is 30 days)
 # -------------------------------------
@@ -248,9 +260,26 @@ try {
     # --------- Your detection logic starts here ---------  
     # --------------------------------------------------#>
 
+    # Service name to check
+    $ServiceName = "UsoSvc"
+    # Update Orchestrator Service. Manages Windows Updates. If stopped, 
+    # your devices will not be able to download and install the latest updates.
 
-
-
+    # Get startup type via WMI/Win32_Service
+        $svcConfig = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop  
+        if (-not $svcConfig) {
+            Write-Log -Message "Service config unavailable — cannot remediate." -Type 3 -StdOut
+            $exitCode = 1
+        } else {
+            if ($svcConfig.StartMode -ne "Auto") { # e.g. 'Automatic', 'Manual', 'Disabled'
+                Write-Log "[FAIL] The $ServiceName StartMode is $($svcConfig.StartMode) (expected Auto)" -Type 3 -StdOut
+                $exitCode = 1
+            }
+            if ($svcConfig.State -ne "Running") { # e.g. 'Running', 'Stopped'
+                Write-Log "[FAIL] The $ServiceName Service state is $($svcConfig.State) (expected Running)" -Type 3 -StdOut
+                $exitCode = 1
+            }
+        }
 
     # ----------------------------------------------------
     # ----------   End of your detection logic  ----------  
@@ -259,6 +288,9 @@ try {
   # Compliance Result * DO NOT MODIFY  *
     if ($exitCode -eq 0) { # Log will not be saved if there are no issues to log and the device hasn't been non-compliant recently.
         Write-Log "[PASS] The device is compliant." -StdOut # Intune detection output 
+        exit $exitCode
+    } elseif ($exitCode -eq 2){ # Script failure
+        Write-Log "[FAIL] The device is non-compliant due to a script failure." -Type 3 -StdOut
         exit $exitCode
     } else { # Device is not compliant
         Write-Log "[FAIL] The device is non-compliant."
