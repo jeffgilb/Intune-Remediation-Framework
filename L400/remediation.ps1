@@ -16,10 +16,13 @@ and summarized to the Intune admin center.
 
 .NOTES
     Registry Checkpoint Location:
-        HKLM:\SOFTWARE\IntuneRemediations\<LogName>
+        HKLM:\SOFTWARE\IntuneRemediations\L400-UsoSvcRemediation
 
     Log File:
-        <SystemDrive>\Logs\IR\<LogName>.log
+        <SystemDrive>\Logs\IR\L400-UsoSvcRemediation.log
+
+    Verbose Log File (optional):
+        <SystemDrive>\Logs\IR\L400-UsoSvcRemediation_verbose.log
 
     Registry Checkpoint Values:
         - RunId (correlation identifier)
@@ -219,7 +222,7 @@ $scriptVersion      = "1.0.0"                       # Script version
 $logPath            = "$env:SystemDrive\Logs\IR"    # Log path must match the path in the detection script
 $logName            = "UsoSvcRemediation"           # Log name must match the name in the detection script
 $stateKey           = "HKLM:\SOFTWARE\IntuneRemediations" # Regkey must match the regkey in the detection script
-$interactiveLogging = $true                         # Display console output for troubleshooting
+$interactiveLogging = $false                        # Display console output for troubleshooting
 $verboseLogging     = $false                        # Enables script transcript for troubleshooting
 # -------------------------------------
 

@@ -93,9 +93,9 @@ function Restart-64Bit {
 # ---      Script Configuration     ---
 $ErrorActionPreference  = 'Stop'                        # Ensures try/catch works reliably
 $logPath                = "$env:SystemDrive\Logs\IR"    # Ensure this path is pulled with Intune collects diagnostics
-$logName                = "UsoSvcRemediation"           # Name of the log file
+$logName                = "L300-UsoSvcRemediation"      # Name of the log file
 $ScriptVersion          = "1.0.0"                       # Version of the script
-$InteractiveLogging     = $false                         # Display console output for testing 
+$InteractiveLogging     = $false                        # Display console output for testing 
 $compliant              = $true                         # Intitalize compliance state
 $detectionOutput = [System.Collections.Generic.List[string]]::new() # list of remediation detection output to display in Intune admin center
 Restart-64Bit                                           # Ensure we are running as a 64-bit process on an x64 system 

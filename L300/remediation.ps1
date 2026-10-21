@@ -9,6 +9,9 @@ only when required (idempotent). Logs all activity in CMTrace-
 compatible format and returns appropriate exit codes for
 Intune Remediations reporting.
 
+Log File:
+    <SystemDrive>\Logs\IR\L300-UsoSvcRemediation.log
+
 .NOTES
 Version: 1.0.0
 Author: Jeff Gilbert
@@ -91,9 +94,9 @@ function Restart-64Bit {
 # ---      Script Configuration     ---
 $ErrorActionPreference  = 'Stop'                        # Ensures try/catch works reliably
 $logPath                = "$env:SystemDrive\Logs\IR"    # Ensure this path is pulled with Intune collects diagnostics
-$logName                = "UsoSvcRemediation"           # Name of the log file
+$logName                = "L300-UsoSvcRemediation"      # Name of the log file
 $ScriptVersion          = "1.0.0"                       # Script version
-$InteractiveLogging     = $true                         # Display console output for testing 
+$InteractiveLogging     = $false                        # Display console output for testing 
 Restart-64Bit                                           # Ensure we are running as a 64-bit process on an x64 system    
 # -------------------------------------
 
@@ -101,8 +104,6 @@ Restart-64Bit                                           # Ensure we are running 
 
 Write-Log "*****    Starting remediation script actions.    *****" 
 Write-Log "Remediation script version: $ScriptVersion." -Component "Version"
-
-
 
 try {
     # Service name to check

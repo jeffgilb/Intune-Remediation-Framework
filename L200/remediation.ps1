@@ -2,7 +2,7 @@
 
 $ServiceName = 'UsoSvc'
 $LogDirectory = Join-Path $env:ProgramData 'Microsoft\IntuneManagementExtension\Logs'
-$TranscriptPath = Join-Path $LogDirectory 'UsoSvcRemediation.log'
+$TranscriptPath = Join-Path $LogDirectory 'L200-UsoSvcRemediation.log'
 
 try {
     Start-Transcript -Path $TranscriptPath -Append -Force

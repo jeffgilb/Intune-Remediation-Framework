@@ -75,6 +75,7 @@ Intune Remediation remediation script template. This script template provides a 
 The following examples are based on the templates with the same features.
 
 ### Check Wallpaper Download
+Detects a non-compliant wallpaper download state for Windows Personalization CSP and forces a reset of the PersonalizationCSP registry key values.
 - **CheckWallpaperDownload-detection**. Detects a non-compliant wallpaper download state for Windows Personalization CSP.
 This Intune detection script reads the DesktopImageStatus value under *HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP*
 and flags the device as non-compliant when the wallpaper has not downloaded and applied successfully. It records detection state to the registry,
@@ -85,6 +86,7 @@ If the value is not compliant, the script removes the personalization registry k
 and validates that DesktopImageStatus returns to 1.
 
 ### Contoso Registry Value Check
+Ensures the Contoso registry value is configured correctly.
 - **ContosoReg-detection**. Ensures *HKLM:\SOFTWARE\Contoso\Settings\Enabled* is a DWORD with value 1.
 Logs the remediation and records its result and run metadata in the
 configured Intune remediation state registry key.
@@ -93,6 +95,7 @@ Logs the remediation and records its result and run metadata in the
 configured Intune remediation state registry key.
 
 ### Custom Log Location Collection
+Remediation script pair to ensure custom log locatinos are collected with MDM Diagnostics.
 - **CustomLogCollection-detection**. Verifies custom log collection entries have been configured.
 This script checks the following registry path: *HKLM:\SOFTWARE\Microsoft\MdmDiagnostics\Area\Autopilot\FileEntry*.
 It verifies that specific REG_DWORD value names (log path wildcard entries) exist and that each value is

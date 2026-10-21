@@ -19,10 +19,10 @@ Author  : Jeff Gilbert
     - Transcript logging support for troubleshooting
 
     Registry Checkpoint Location:
-        HKLM:\SOFTWARE\IntuneRemediations\<LogName>
+        HKLM:\SOFTWARE\IntuneRemediations\L400-UsoSvcRemediation
 
     Log File:
-        <SystemDrive>\Logs\IR\<LogName>.log
+        <SystemDrive>\Logs\IR\L400-UsoSvcRemediation.log
 
     Registry Checkpoint Values:
         - Detection result
@@ -226,7 +226,7 @@ function Remove-ExpiredRemediationLog {
 # * MODIFY THESE AS NEEDED *
 $ScriptVersion          = "1.0.0"                               # Version of the script
 $logPath                = "$env:SystemDrive\Logs\IR"            # Ensure this path is pulled with Intune collects diagnostics
-$logName                = "UsoSvcRemediation"                   # Name of the log file
+$logName                = "L400-UsoSvcRemediation"                   # Name of the log file
 $StateKey               = "HKLM:\SOFTWARE\IntuneRemediations"   # Base registry key for storing remediation state
 $InteractiveLogging     = $true                                # Enable/disable display console output for troubleshooting (DO NOT deploy as $true)
 $verboseLogging         = $false                                # Enable/disable script transcript for troubleshooting
