@@ -197,15 +197,21 @@ Run this from an elevated PowerShell session. It creates a timestamped ZIP file 
 
     You can run this script as System from an elevated PowerShell console using PSExec64.exe by adding the -System command line switch to collect the cached detection and remediation script files along with the logs.
 
-Install from the PowerShell Gallery to run on your device:
-```powershell
-Install-Script Collect-RemediationLogs
-```
+Install from the PowerShell Gallery:
 
-Or just save it locally so you can run it on remote devices (recommended):
-```powershell
-Save-Script Collect-RemediationLogs -Path <path>
-```
+    Install-Script Collect-RemediationLogs
+
+Just save it locally so you can run it on remote devices (recommended for this one): 
+
+    Save-Script Collect-RemediationLogs –Path <path>
+
+Run it:
+
+    Collect-RemediationLogs
+    
+   or from an admin PowerShell console:
+
+    Collect-RemediationLogs -System (this grabs teh actual remediaton scripts too)
 
 ## References
 
