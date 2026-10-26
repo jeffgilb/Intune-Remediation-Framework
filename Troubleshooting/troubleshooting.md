@@ -195,7 +195,7 @@ Run this from an elevated PowerShell session. It creates a timestamped ZIP file 
 
 **TIP:**
 
-    Run this script as System using PSExec64.exe and add the -IncludeCachedScripts command line switch to collect the cached detection and remediation script files along with the logs.
+    You can run this script as System from an elevated PowerShell console using PSExec64.exe by adding the -System command line switch to collect the cached detection and remediation script files along with the logs.
 
 Install from the PowerShell Gallery to run on your device:
 ```powershell

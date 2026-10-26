@@ -28,6 +28,7 @@ Functions, Logs, Versions… Adult Supervision
     - CMTrace-compatible logging
     - Useful Intune output (aggregate and emit once)
 - Version tracking
+- Default compliance state
 - Basic log clean-up (no detection error = no log)
 - Turn on/off interactive logging to console
 
@@ -42,6 +43,7 @@ Telemetry That Keeps You Out of Trouble
     - Last run results tracking
     - Remediation run count
     - Run ID
+    - All available automagically from the Intune admin center
 - Correlation IDs to match logs to registry
 - Advanced log management
     - Optional verbose Logging  
@@ -57,6 +59,10 @@ Or just save it locally to have a look:
 
     Save-Script Create-IntuneRemediation –Path <path>
 
+Run it:
+
+    Create-IntuneRemediation -WorkspaceName <MyWorkspaceName>
+
 ### Collect-RemediationLogs
 Install from the PowerShell Gallery:
 
@@ -65,3 +71,11 @@ Install from the PowerShell Gallery:
 Just save it locally so you can run it on remote devices (recommended for this one): 
 
     Save-Script Collect-RemediationLogs –Path <path>
+
+Run it:
+
+    Collect-RemediationLogs
+    
+   or from an admin PowerShell console:
+
+    Collect-RemediationLogs -System (this grabs teh actual remediaton scripts too)
