@@ -28,7 +28,7 @@ Functions, Logs, Versions… Adult Supervision
     - CMTrace-compatible logging
     - Useful Intune output (aggregate and emit once)
 - Version tracking
-- Basic log clean-up (no error = no log)
+- Basic log clean-up (no detection error = no log)
 - Turn on/off interactive logging to console
 
 ## Level 400: The ‘Jeff Has Entered the Chat’ Level
