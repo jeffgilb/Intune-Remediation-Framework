@@ -78,4 +78,4 @@ Run it:
     
    or from an admin PowerShell console:
 
-    Collect-RemediationLogs -System (this grabs teh actual remediaton scripts too)
+    Collect-RemediationLogs -System (this grabs the actual remediaton scripts too)
